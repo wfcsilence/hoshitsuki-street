@@ -351,12 +351,27 @@ function meow(start){
  const filters=[];for(let [freq,end,level,q] of [[800,510,.7,1.7],[1550,960,.33,2.8],[2700,1750,.1,3]]){let f=ctx.createBiquadFilter(),g=ctx.createGain();f.type='bandpass';f.Q.value=q;f.frequency.setValueAtTime(freq,start);f.frequency.exponentialRampToValueAtTime(end,start+.7);g.gain.value=level;voice.connect(f);f.connect(g);g.connect(gain);filters.push(f,g)}
  voice.start(start);vibrato.start(start);voice.stop(start+.82);vibrato.stop(start+.82);voice.onended=()=>{voice.disconnect();vibrato.disconnect();depth.disconnect();filters.forEach(n=>n.disconnect());gain.disconnect()};
 }
+// Two soft nasal whimpers, with rounded pitch glides and a little vocal tremble.
+function dogWhimper(start){
+ const ctx=audioContext;
+ for(const [offset,length,base,peak,level] of [[0,.43,335,495,.095],[.51,.57,310,440,.075]]){
+  const at=start+offset,voice=ctx.createOscillator(),vibrato=ctx.createOscillator(),depth=ctx.createGain(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
+  voice.setPeriodicWave(ctx.createPeriodicWave(new Float32Array(6),new Float32Array([0,1,.3,.14,.055,.018])));
+  voice.frequency.setValueAtTime(base,at);voice.frequency.exponentialRampToValueAtTime(peak,at+length*.32);voice.frequency.exponentialRampToValueAtTime(base*.82,at+length);
+  vibrato.frequency.value=8.5;depth.gain.value=6;vibrato.connect(depth);depth.connect(voice.frequency);
+  filter.type='lowpass';filter.frequency.setValueAtTime(1450,at);filter.frequency.exponentialRampToValueAtTime(820,at+length);filter.Q.value=.85;
+  gain.gain.setValueAtTime(.0001,at);gain.gain.exponentialRampToValueAtTime(level,at+.055);gain.gain.exponentialRampToValueAtTime(level*.65,at+length*.55);gain.gain.exponentialRampToValueAtTime(.0001,at+length);
+  voice.connect(filter);filter.connect(gain);gain.connect(audioMaster);voice.start(at);vibrato.start(at);voice.stop(at+length+.025);vibrato.stop(at+length+.025);
+  voice.onended=()=>{voice.disconnect();vibrato.disconnect();depth.disconnect();filter.disconnect();gain.disconnect();};
+ }
+}
 // A damped low-frequency impact supplies the car body's short, muffled thump.
 function bodyImpact(start,duration,volume){if(!audioContext)return;const o=audioContext.createOscillator(),g=audioContext.createGain();o.frequency.setValueAtTime(118,start);o.frequency.exponentialRampToValueAtTime(49,start+duration);g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(volume,start+.009);g.gain.exponentialRampToValueAtTime(.0001,start+duration);o.connect(g);g.connect(audioMaster);o.start(start);o.stop(start+duration+.025);o.onended=()=>{o.disconnect();g.disconnect()};}
 function carHorn(t){const ctx=audioContext,env=ctx.createGain(),filter=ctx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=1250;filter.Q.value=.45;env.gain.setValueAtTime(.0001,t);env.gain.linearRampToValueAtTime(.105,t+.018);env.gain.setValueAtTime(.095,t+.22);env.gain.exponentialRampToValueAtTime(.0001,t+.34);env.connect(filter);filter.connect(audioMaster);const wave=ctx.createPeriodicWave(new Float32Array(5),new Float32Array([0,1,.27,.08,.025]));let remaining=2;for(const f of [400,500]){const o=ctx.createOscillator();o.setPeriodicWave(wave);o.frequency.value=f;o.connect(env);o.start(t);o.stop(t+.36);o.onended=()=>{o.disconnect();if(--remaining===0){env.disconnect();filter.disconnect();}};}}
 function playSound(kind,opening){if(!audioContext)return;soundEvents++;soundCounts[kind]=(soundCounts[kind]||0)+1;const t=audioContext.currentTime+.012;
  if(kind==='horn')carHorn(t);
  else if(kind==='meow')meow(t);
+ else if(kind==='dog')dogWhimper(t);
  else if(kind==='door'){tone(784,t,.65,.105);tone(1568,t,.35,.018);tone(622.25,t+.22,.9,.09);tone(1244.5,t+.22,.5,.015);}
  else if(kind==='chime'){[1760,2817,3917,5165].forEach((f,i)=>tone(f,t+i*.023,1.7-i*.22,.065/(1+i*.8)));tone(2112,t+.32,1.15,.025);}
  else if(kind==='vend'){tone(880,t,.12,.055);tone(1174.66,t+.12,.18,.045);noiseTick(t+.18,.22,.11,280);tone(132,t+.2,.19,.04);}
@@ -436,7 +451,7 @@ function actOnScene(e){
  else if(action==='umbrella'){const u=hit.object.userData.umbrella,raise=!u.userData.raised;umbrellas.forEach(other=>other.userData.raised=raise&&other===u);playSound('umbrella',raise);}
  else if(action==='pinwheel'){hit.object.userData.pinwheel.userData.boostAt=t;}
  else if(action==='exhaust'){smokeBurstAt=t;}
- else if(action==='dog'){dogCuriosity=t;playSound('leaves');}
+ else if(action==='dog'){if(t-dogCuriosity>.9)playSound('dog');dogCuriosity=t;}
  else if(action==='takeout'){requestPickup(t);}
  else if(action==='cat'){catReact=t;if(t-lastMeow>.9){playSound('meow');lastMeow=t;}}
 }
